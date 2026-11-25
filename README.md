@@ -24,11 +24,14 @@ page that other people run.
 
 Run it with a **sandbox key**: create one at [app.fiz.co → Settings → Integrations](https://app.fiz.co/settings/integrations)
 and put it in `FIZ_API_KEY`. A key starting with `fiz_test_` sends documents
-to the AT test services, with no fiscal effect. The walkthrough below stops on
-any other key, because its last step issues a real invoice with a production
-key.
+to the AT test services, with no fiscal effect. Both steps below stop on any
+other key, because the second one issues a real invoice with a production key.
+
+**Step 1: a draft and its PDF.** A draft has no number and no fiscal effect.
 
 ```python
+from pathlib import Path
+
 from fiz_sdk import Fiz
 
 fiz = Fiz()  # reads FIZ_API_KEY
@@ -48,8 +51,6 @@ customer = fiz.customers.create({"name": "Example customer", "country": "PT"})
 item = fiz.items.create(
     {"name": "Example service", "type": "SERVICE", "unitPrice": 10, "vatRate": "NORMAL"}
 )
-
-# A draft has no number and no fiscal effect.
 draft = fiz.invoices.create(
     {
         "type": "INVOICE",
@@ -58,23 +59,36 @@ draft = fiz.invoices.create(
         "items": [{"id": item["id"], "quantity": 1}],
     }
 )
-pdf = fiz.invoices.download_pdf(draft["id"])  # bytes
-
-# Issuing is fiscal and irreversible with a production key: numbered, ATCUD,
-# reported to the AT. expectedUpdatedAt issues exactly the draft you looked
-# at, and refuses it if it changed since.
-# Without a revision there is nothing to check against: stop rather than
-# issue whatever the draft is by then.
-revision = draft["updatedAt"]
-if not revision:
+Path("draft.pdf").write_bytes(fiz.invoices.download_pdf(draft["id"]))
+# The revision pins what you are about to look at. Without one there is nothing
+# to check the issue against: stop rather than issue whatever the draft is by then.
+if not draft["updatedAt"]:
     raise SystemExit("The draft came back without its revision.")
-invoice = fiz.invoices.issue(draft["id"], {"expectedUpdatedAt": revision})
+print("Look at draft.pdf, then issue:", draft["id"], draft["updatedAt"])
+```
+
+**Step 2, once you have looked at the PDF: issue that draft.** Issuing is
+fiscal and irreversible with a production key: numbered, ATCUD, reported to
+the AT. `expectedUpdatedAt` issues exactly the draft you looked at, and the
+API refuses it if anyone changed it since.
+
+```python
+import sys
+
+from fiz_sdk import Fiz
+
+fiz = Fiz()
+if fiz.environment != "sandbox":
+    raise SystemExit("Use a sandbox key (fiz_test_…) for this walkthrough.")
+
+draft_id, revision = sys.argv[1], sys.argv[2]  # what step 1 printed
+invoice = fiz.invoices.issue(draft_id, {"expectedUpdatedAt": revision})
 print(invoice["number"], invoice["atcud"])
 ```
 
-A runnable version is in [`examples/quickstart.py`](examples/quickstart.py).
-It issues in two runs: the first creates the draft and saves its PDF, the
-second issues that draft by its id, after you have looked at it.
+The same two steps as one runnable script are in
+[`examples/quickstart.py`](examples/quickstart.py): its first run creates the
+draft and saves its PDF, and a second run with `--issue` issues that draft.
 
 ## What it covers
 

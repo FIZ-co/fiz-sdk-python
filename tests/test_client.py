@@ -307,6 +307,8 @@ class TestRetries:
         [
             pytest.param('{"number":', id="broken JSON"),
             pytest.param("", id="an empty body announced as JSON"),
+            pytest.param('{"total":NaN}', id="NaN, which is not JSON"),
+            pytest.param('{"total":Infinity}', id="Infinity, which is not JSON"),
         ],
     )
     def test_never_returns_a_success_with_a_broken_body_it_raises_with_the_key(
@@ -546,3 +548,28 @@ class TestPdfDownload:
         assert len(content) > 0
         assert mock.requests[1].url.host == "files.example.com"
         assert "x-api-key" not in mock.requests[1].headers
+
+    def test_sends_none_of_the_http_clients_own_credentials_to_a_foreign_link(self) -> None:
+        # An integration that put its credential on the httpx.Client itself (default
+        # headers, cookies, auth) must not leak it to the host that stores the file.
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.host == "api.fiz.co":
+                body = {"id": "f1", "name": "FT.pdf", "url": "https://files.example.com/FT.pdf"}
+                return httpx.Response(200, json=body)
+            return httpx.Response(200, content=b"%PDF")
+
+        http_client = httpx.Client(
+            transport=httpx.MockTransport(handler),
+            headers={"authorization": "Bearer client-default", "x-api-key": "client-default"},
+            cookies={"session": "client-cookie"},
+            auth=("user", "secret"),
+        )
+        fiz = Fiz(api_key="fiz_live_key", http_client=http_client)
+        assert fiz.invoices.download_pdf("inv1") == b"%PDF"
+        foreign = seen[-1]
+        assert foreign.url.host == "files.example.com"
+        for header in ("authorization", "x-api-key", "cookie"):
+            assert header not in foreign.headers

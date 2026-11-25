@@ -19,6 +19,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # An open update PR may carry commits a person added (a resource method
+      # for a new operation): build on top of it, never over it. Otherwise
+      # start from main; the branch of a closed PR is replaced.
+      - name: Pick the branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=api-spec-update
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Only an OPEN pull request from this branch: `gh pr view <branch>`
+          # also finds the last merged one.
+          open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          echo "open_pr=$open_pr" >> "$GITHUB_OUTPUT"
+          if [ -n "$open_pr" ]; then
+            git checkout -B "$branch" "origin/$branch"
+            if ! git merge --no-edit origin/main; then
+              echo "::error::$branch (PR #$open_pr) does not merge with main. Merge main into it by hand; this run changes nothing."
+              exit 1
+            fi
+          else
+            git checkout -B "$branch" origin/main
+          fi
       - uses: astral-sh/setup-uv@v10.4.0
         with:
           python-version: '3.13'
@@ -33,19 +60,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           OUTCOME: ${{ steps.check.outcome }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          OPEN_PR: ${{ steps.branch.outputs.open_pr }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if git diff --quiet -- openapi src/fiz_sdk/generated; then
             echo "Spec unchanged"
             exit 0
           fi
-          branch=api-spec-update
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$branch"
           git add openapi src/fiz_sdk/generated
           git commit -m "chore(spec): update to the current API document"
-          git push --force origin "$branch"
+          if [ -n "$OPEN_PR" ]; then
+            # A plain push: the branch was built on its remote tip, so this
+            # only adds commits. If someone pushed meanwhile it is refused,
+            # and the next run starts from their commits.
+            git push origin "$BRANCH"
+          else
+            git push --force origin "$BRANCH"
+          fi
           sha=$(git rev-parse HEAD)
 
           # The result belongs to the commit it was checked on: a status on
@@ -57,15 +89,11 @@ jobs:
             -f description="./scripts/check.sh against the new spec: $OUTCOME" \
             -f target_url="$RUN_URL" >/dev/null
 
-          body="The API document at https://api.fiz.co/-json changed. Checks on ${sha:0:7}: **$OUTCOME** ([run]($RUN_URL)). If they failed, wrap the new operations in a resource method. API changelog: https://api.fiz.co/docs/changelog"
-          # Only an OPEN pull request from this branch: `gh pr view <branch>`
-          # also finds the last merged one, and would edit it instead of
-          # opening a new one.
-          open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$open_pr" ]; then
-            gh pr edit "$open_pr" --body "$body"
+          body="The API document at https://api.fiz.co/-json changed. Checks on ${sha:0:7}: **$OUTCOME** ([run]($RUN_URL)). If they failed, wrap the new operations in a resource method and push it to this branch: later updates are added on top of it. API changelog: https://api.fiz.co/docs/changelog"
+          if [ -n "$OPEN_PR" ]; then
+            gh pr edit "$OPEN_PR" --body "$body"
           else
-            gh pr create --head "$branch" \
+            gh pr create --head "$BRANCH" \
               --title "chore(spec): update to the current API document" --body "$body"
           fi
       - name: Fail when the checks failed

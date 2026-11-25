@@ -28,10 +28,18 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           if [ -z "$TERMS" ]; then
-            echo "::notice::INTERNAL_TERMS is not set (or this is a fork): scan skipped."
-            exit 0
+            # A fork's pull request gets no secrets; a maintainer reviews it.
+            # On this repository's own branches a missing secret would make
+            # the check pass without scanning anything, so it fails instead.
+            if [ "$FROM_FORK" = true ]; then
+              echo "::notice::Pull request from a fork: secrets are not available, scan skipped."
+              exit 0
+            fi
+            echo "::error::The INTERNAL_TERMS secret is not set: nothing was scanned. Add it in Settings → Secrets and variables → Actions."
+            exit 1
           fi
           terms="$RUNNER_TEMP/terms"
           printf '%s\n' "$TERMS" | sed '/^[[:space:]]*$/d' > "$terms"

@@ -96,7 +96,9 @@ class FizClient(TypedCalls):
             timeout: Timeout of each attempt, in seconds (default 60): it bounds connecting,
                 sending and each read.
             http_client: An `httpx.Client` to send requests with (proxies, custom transport).
-                The SDK never lets it follow redirects. Closing it is yours.
+                The SDK never lets it follow redirects, and a file download that leaves the
+                API's origin sends none of its default headers, cookies or auth. Closing it
+                is yours.
             app_info: Your integration's name and version, added to the User-Agent.
             on_response: Called with every response to an API operation, retries included
                 (not the file download behind `download_pdf`): for logging the request id
@@ -230,8 +232,10 @@ class FizClient(TypedCalls):
                     # holds the API document to that), so a success is parsed as JSON
                     # whatever Content-Type says, and one that does not parse is a lost
                     # response: issue() must not "succeed" with half an invoice or an HTML
-                    # page. An error body is read loosely; its status decides.
-                    payload = json.loads(raw) if response.is_success else _parse_error_body(raw)
+                    # page. Strictly JSON: Python's NaN and Infinity are not, and would hand
+                    # the caller a number no API response contains. An error body is read
+                    # loosely; its status decides.
+                    payload = _parse_json(raw) if response.is_success else _parse_error_body(raw)
                 except (httpx.RequestError, ValueError) as error:
                     body_lost = error
             finally:
@@ -282,13 +286,12 @@ class FizClient(TypedCalls):
         url = httpx.URL(file_url)
         for _hop in range(MAX_REDIRECTS + 1):
             label = f"Downloading {url.path}"
-            headers = (
-                {"user-agent": self._user_agent, **self._auth_headers}
-                if _origin(url) == api_origin
-                else {}
-            )
             try:
-                response = self._send("GET", url, httpx.Headers(headers), None, attempt_timeout)
+                if _origin(url) == api_origin:
+                    headers = httpx.Headers({"user-agent": self._user_agent, **self._auth_headers})
+                    response = self._send("GET", url, headers, None, attempt_timeout)
+                else:
+                    response = self._send_bare(url, attempt_timeout)
             except httpx.RequestError as error:
                 raise _no_response_error(error, label, attempt_timeout, None) from error
             try:
@@ -332,6 +335,20 @@ class FizClient(TypedCalls):
         # whatever origin it points to. Streamed, so that a status whose body is then cut
         # off is still known.
         return self._http.send(request, stream=True, follow_redirects=False)
+
+    def _send_bare(self, url: httpx.URL, timeout: float) -> httpx.Response:
+        """A GET to another origin (where a file is stored) with nothing of the caller's
+        configuration that could carry a credential: not built by `build_request`, which
+        would add the http_client's default headers, cookies and params, and sent with
+        `auth=None`, which drops its auth. Its transport, proxy and event hooks still
+        apply."""
+        request = httpx.Request(
+            "GET",
+            url,
+            headers={"user-agent": self._user_agent},
+            extensions={"timeout": httpx.Timeout(timeout).as_dict()},
+        )
+        return self._http.send(request, stream=True, follow_redirects=False, auth=None)
 
 
 def _should_retry(
@@ -392,6 +409,16 @@ def _query_value(item: Any) -> str:
     if isinstance(item, float) and item.is_integer():
         return str(int(item))
     return str(item)
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not JSON")
+
+
+def _parse_json(raw: bytes) -> Any:
+    """A success body as strict JSON (RFC 8259): `json.loads` alone also takes NaN,
+    Infinity and -Infinity, which no JSON encoder writes."""
+    return json.loads(raw, parse_constant=_reject_constant)
 
 
 def _parse_error_body(raw: bytes) -> Any:
