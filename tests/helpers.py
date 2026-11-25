@@ -86,4 +86,7 @@ def mock_fiz(replies: list[Answer], **options: Any) -> Mock:
     http_client = httpx.Client(transport=httpx.MockTransport(handler), follow_redirects=True)
     options.setdefault("api_key", "fiz_live_key")
     fiz = Fiz(http_client=http_client, **options)
+    # Files on another origin go through the SDK's own client: answered by the same
+    # queue, so a test reads every request in order.
+    fiz._client._file_http = httpx.Client(transport=httpx.MockTransport(handler))
     return Mock(fiz, requests)

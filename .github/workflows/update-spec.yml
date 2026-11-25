@@ -9,6 +9,12 @@ on:
     - cron: '17 6 * * *'
   workflow_dispatch:
 
+# One run at a time: two runs that both see no open PR would each rebuild the
+# branch from main.
+concurrency:
+  group: update-spec
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -37,6 +43,9 @@ jobs:
           # also finds the last merged one.
           open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
           echo "open_pr=$open_pr" >> "$GITHUB_OUTPUT"
+          # The branch as this run found it (empty: it does not exist). A
+          # replace below only succeeds while it is still exactly that.
+          echo "remote_sha=$(git rev-parse -q --verify "refs/remotes/origin/$branch" || true)" >> "$GITHUB_OUTPUT"
           if [ -n "$open_pr" ]; then
             git checkout -B "$branch" "origin/$branch"
             if ! git merge --no-edit origin/main; then
@@ -62,6 +71,7 @@ jobs:
           OUTCOME: ${{ steps.check.outcome }}
           BRANCH: ${{ steps.branch.outputs.name }}
           OPEN_PR: ${{ steps.branch.outputs.open_pr }}
+          REMOTE_SHA: ${{ steps.branch.outputs.remote_sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if git diff --quiet -- openapi src/fiz_sdk/generated; then
@@ -76,7 +86,9 @@ jobs:
             # and the next run starts from their commits.
             git push origin "$BRANCH"
           else
-            git push --force origin "$BRANCH"
+            # Replaces a closed PR's branch, but only the commit this run saw:
+            # if a PR was opened and pushed to meanwhile, the push is refused.
+            git push --force-with-lease="$BRANCH:$REMOTE_SHA" origin "$BRANCH"
           fi
           sha=$(git rev-parse HEAD)
 

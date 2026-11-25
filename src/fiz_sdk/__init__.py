@@ -142,7 +142,7 @@ class Fiz(TypedCalls):
         return self._client.environment
 
     def close(self) -> None:
-        """Closes the connection pool (not an `http_client` you passed in)."""
+        """Closes the connection pools (not an `http_client` you passed in)."""
         self._client.close()
 
     def __enter__(self) -> Self:

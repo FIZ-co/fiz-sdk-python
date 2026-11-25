@@ -549,27 +549,47 @@ class TestPdfDownload:
         assert mock.requests[1].url.host == "files.example.com"
         assert "x-api-key" not in mock.requests[1].headers
 
-    def test_sends_none_of_the_http_clients_own_credentials_to_a_foreign_link(self) -> None:
-        # An integration that put its credential on the httpx.Client itself (default
-        # headers, cookies, auth) must not leak it to the host that stores the file.
-        seen: list[httpx.Request] = []
+    def test_never_sends_a_foreign_link_through_the_callers_http_client(self) -> None:
+        # An integration may put its credential anywhere on its httpx.Client: default
+        # headers, cookies, auth, or an event hook that adds it to every request. None of
+        # it may reach the host that stores the file, so that request never goes through
+        # the caller's client at all.
+        hooked: list[str] = []
 
-        def handler(request: httpx.Request) -> httpx.Response:
-            seen.append(request)
-            if request.url.host == "api.fiz.co":
-                body = {"id": "f1", "name": "FT.pdf", "url": "https://files.example.com/FT.pdf"}
-                return httpx.Response(200, json=body)
+        def add_token(request: httpx.Request) -> None:
+            hooked.append(request.url.host)
+            request.headers["authorization"] = "Bearer from-a-hook"
+
+        def api(request: httpx.Request) -> httpx.Response:
+            assert request.url.host == "api.fiz.co", "a foreign link reached http_client"
+            body = {"id": "f1", "name": "FT.pdf", "url": "https://files.example.com/FT.pdf"}
+            return httpx.Response(200, json=body)
+
+        files: list[httpx.Request] = []
+
+        def storage(request: httpx.Request) -> httpx.Response:
+            files.append(request)
             return httpx.Response(200, content=b"%PDF")
 
         http_client = httpx.Client(
-            transport=httpx.MockTransport(handler),
+            transport=httpx.MockTransport(api),
             headers={"authorization": "Bearer client-default", "x-api-key": "client-default"},
             cookies={"session": "client-cookie"},
             auth=("user", "secret"),
+            event_hooks={"request": [add_token]},
         )
         fiz = Fiz(api_key="fiz_live_key", http_client=http_client)
+        fiz._client._file_http = httpx.Client(transport=httpx.MockTransport(storage))
         assert fiz.invoices.download_pdf("inv1") == b"%PDF"
-        foreign = seen[-1]
-        assert foreign.url.host == "files.example.com"
+        assert hooked == ["api.fiz.co"]
+        assert [r.url.host for r in files] == ["files.example.com"]
         for header in ("authorization", "x-api-key", "cookie"):
-            assert header not in foreign.headers
+            assert header not in files[0].headers
+
+    def test_closes_its_own_file_client_but_not_the_callers(self) -> None:
+        mock = mock_fiz([])
+        file_http = mock.fiz._client._file_http
+        assert file_http is not None
+        mock.fiz.close()
+        assert file_http.is_closed
+        assert not mock.fiz._client._http.is_closed
