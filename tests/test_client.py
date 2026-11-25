@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
@@ -585,6 +586,41 @@ class TestPdfDownload:
         assert [r.url.host for r in files] == ["files.example.com"]
         for header in ("authorization", "x-api-key", "cookie"):
             assert header not in files[0].headers
+
+    def test_creates_one_file_client_when_threads_download_at_once(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Every thread is held inside httpx.Client() until all have entered the SDK,
+        # so without a lock each would create one and close() would close the last.
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+
+        threads = 8
+        created: list[httpx.Client] = []
+        barrier = threading.Barrier(threads, timeout=0.3)
+        real_client = httpx.Client
+
+        def slow_client(*args: Any, **kwargs: Any) -> httpx.Client:
+            with contextlib.suppress(threading.BrokenBarrierError):
+                barrier.wait()
+            client = real_client(*args, **kwargs)
+            created.append(client)
+            return client
+
+        fiz = Fiz(api_key="fiz_live_key", http_client=real_client())
+        monkeypatch.setattr(httpx, "Client", slow_client)
+        start = threading.Barrier(threads)
+
+        def first_use() -> httpx.Client:
+            start.wait()
+            return fiz._client._file_client()
+
+        with ThreadPoolExecutor(threads) as pool:
+            clients = list(pool.map(lambda _: first_use(), range(threads)))
+        assert len(created) == 1
+        assert all(c is created[0] for c in clients)
+        fiz.close()
+        assert created[0].is_closed
 
     def test_closes_its_own_file_client_but_not_the_callers(self) -> None:
         mock = mock_fiz([])

@@ -7,6 +7,7 @@ import os
 import platform
 import random
 import re
+import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
@@ -128,6 +129,9 @@ class FizClient(TypedCalls):
         self._owns_http = http_client is None
         # For files on another origin, created on first use (see download()).
         self._file_http: httpx.Client | None = None
+        # Two threads downloading at once must not each create one: close() would
+        # close only the one stored last.
+        self._file_http_lock = threading.Lock()
         self._user_agent = _user_agent(app_info)
         self._on_response = on_response
 
@@ -135,8 +139,9 @@ class FizClient(TypedCalls):
         """Closes the connection pools (not an `http_client` you passed in)."""
         if self._owns_http:
             self._http.close()
-        if self._file_http is not None:
-            self._file_http.close()
+        with self._file_http_lock:
+            if self._file_http is not None:
+                self._file_http.close()
 
     def __enter__(self) -> Self:
         return self
@@ -347,12 +352,20 @@ class FizClient(TypedCalls):
         http_client: its default headers, cookies and auth could be stripped from a
         request, but its event hooks and transport would still run on it, and either may
         add a credential. The SDK's own client carries none of that."""
-        if self._file_http is None:
-            self._file_http = httpx.Client()
-        request = self._file_http.build_request(
+        client = self._file_client()
+        request = client.build_request(
             "GET", url, headers={"user-agent": self._user_agent}, timeout=timeout
         )
-        return self._file_http.send(request, stream=True, follow_redirects=False)
+        return client.send(request, stream=True, follow_redirects=False)
+
+    def _file_client(self) -> httpx.Client:
+        client = self._file_http
+        if client is None:
+            with self._file_http_lock:
+                client = self._file_http
+                if client is None:
+                    client = self._file_http = httpx.Client()
+        return client
 
 
 def _should_retry(
