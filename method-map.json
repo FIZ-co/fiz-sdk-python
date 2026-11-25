@@ -1,0 +1,661 @@
+{
+  "language": "python",
+  "operations": {
+    "BankController_getConnections": {
+      "method": "bank.connections",
+      "params": []
+    },
+    "BankController_getTransactions": {
+      "method": "bank.transactions",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": true
+        }
+      ]
+    },
+    "CompanyController_getCompany": {
+      "method": "company.retrieve",
+      "params": []
+    },
+    "CustomersController_create": {
+      "method": "customers.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "CustomersController_delete": {
+      "method": "customers.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "CustomersController_findAll": {
+      "method": "customers.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "CustomersController_findOne": {
+      "method": "customers.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "CustomersController_restore": {
+      "method": "customers.restore",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "CustomersController_update": {
+      "method": "customers.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ExpensesController_findAll": {
+      "method": "expenses.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ExpensesController_stats": {
+      "method": "expenses.stats",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ExportsController_exportSaftPt": {
+      "method": "exports.saft_pt",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": true
+        }
+      ]
+    },
+    "InvoicesController_cancel": {
+      "method": "invoices.cancel",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "InvoicesController_create": {
+      "method": "invoices.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "InvoicesController_createCreditNote": {
+      "method": "credit_notes.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "InvoicesController_delete": {
+      "method": "invoices.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "InvoicesController_findAll": {
+      "method": "invoices.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "InvoicesController_findOne": {
+      "method": "invoices.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "InvoicesController_getPdf": {
+      "method": "invoices.pdf",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "InvoicesController_issue": {
+      "method": "invoices.issue",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": false
+        }
+      ]
+    },
+    "InvoicesController_pay": {
+      "method": "invoices.pay",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "InvoicesController_update": {
+      "method": "invoices.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ItemsController_create": {
+      "method": "items.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ItemsController_delete": {
+      "method": "items.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ItemsController_findAll": {
+      "method": "items.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ItemsController_findOne": {
+      "method": "items.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ItemsController_update": {
+      "method": "items.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ProposalsController_cancel": {
+      "method": "proposals.cancel",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ProposalsController_create": {
+      "method": "proposals.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ProposalsController_delete": {
+      "method": "proposals.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ProposalsController_findAll": {
+      "method": "proposals.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ProposalsController_findOne": {
+      "method": "proposals.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ProposalsController_getPdf": {
+      "method": "proposals.pdf",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ScheduledInvoicesController_create": {
+      "method": "recurring_invoices.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "ScheduledInvoicesController_delete": {
+      "method": "recurring_invoices.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ScheduledInvoicesController_findAll": {
+      "method": "recurring_invoices.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "ScheduledInvoicesController_findOne": {
+      "method": "recurring_invoices.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "ScheduledInvoicesController_update": {
+      "method": "recurring_invoices.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "SeriesController_getAll": {
+      "method": "series.list",
+      "params": []
+    },
+    "TemplatesController_create": {
+      "method": "templates.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "TemplatesController_delete": {
+      "method": "templates.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "TemplatesController_fields": {
+      "method": "templates.fields",
+      "params": []
+    },
+    "TemplatesController_findOne": {
+      "method": "templates.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "TemplatesController_getAll": {
+      "method": "templates.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "TemplatesController_preview": {
+      "method": "templates.preview",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "TemplatesController_starter": {
+      "method": "templates.starter",
+      "params": [
+        {
+          "name": "starter_id",
+          "in": "path",
+          "required": true,
+          "param": "starterId"
+        }
+      ]
+    },
+    "TemplatesController_starters": {
+      "method": "templates.starters",
+      "params": []
+    },
+    "TemplatesController_update": {
+      "method": "templates.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "TemplatesController_validate": {
+      "method": "templates.validate",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "TransportDocumentsController_cancel": {
+      "method": "transport_documents.cancel",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "TransportDocumentsController_create": {
+      "method": "transport_documents.create",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "TransportDocumentsController_delete": {
+      "method": "transport_documents.delete",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "TransportDocumentsController_findAll": {
+      "method": "transport_documents.list",
+      "params": [
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "TransportDocumentsController_findOne": {
+      "method": "transport_documents.retrieve",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        }
+      ]
+    },
+    "TransportDocumentsController_getPdf": {
+      "method": "transport_documents.pdf",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "query",
+          "in": "query",
+          "required": false
+        }
+      ]
+    },
+    "TransportDocumentsController_issue": {
+      "method": "transport_documents.issue",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": false
+        }
+      ]
+    },
+    "TransportDocumentsController_update": {
+      "method": "transport_documents.update",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "param": "id"
+        },
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "VatController_calculate": {
+      "method": "vat.calculate",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    },
+    "VatController_validateClient": {
+      "method": "vat.validate_client",
+      "params": [
+        {
+          "name": "body",
+          "in": "body",
+          "required": true
+        }
+      ]
+    }
+  }
+}

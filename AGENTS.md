@@ -81,6 +81,10 @@ is up to date; run both before every push.
 - **Every API operation has a resource method.** `tests/test_coverage.py`
   fails until a new operation is wrapped; until then it is reachable through
   `fiz.call("<operationId>")`.
+- **`method-map.json` follows the resource methods.** The API docs at
+  api.fiz.co show each operation in Python from it (method and arguments).
+  After adding or renaming a method run `uv run python scripts/method_map.py`;
+  `tests/test_method_map.py` fails while it is out of date.
 - **The client's safety rules are behaviour, not style.** A change to any of
   them comes with a test that fails on the previous client:
   - one `Idempotency-Key` per call, reused by every retry; an invalid key is
