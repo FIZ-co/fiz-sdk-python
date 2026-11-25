@@ -1,0 +1,26 @@
+name: Sandbox
+
+# The quickstart end to end against the FIZ API sandbox (no fiscal effect), with
+# every response checked against the API document. Needs the FIZ_TEST_API_KEY
+# secret (a fiz_test_ key); skips without it.
+on:
+  schedule:
+    - cron: '41 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sandbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.13'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run pytest -m sandbox
+        env:
+          FIZ_TEST_API_KEY: ${{ secrets.FIZ_TEST_API_KEY }}

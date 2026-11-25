@@ -1,0 +1,73 @@
+name: Release
+
+# Publishes to PyPI when a version tag (v1.2.3) is pushed, through PyPI trusted
+# publishing: GitHub's OIDC token proves this workflow to PyPI, so there is no
+# PyPI token anywhere, and the upload carries attestations of where it was built.
+#
+# Approval: the publish job runs in the `pypi` environment. Give it required
+# reviewers (Settings → Environments → pypi), so a maintainer approves every
+# version before it reaches PyPI. A compromised workflow cannot ship one alone.
+#
+# One-time setup, before the first tag:
+#  1. On pypi.org → Your account → Publishing → add a pending publisher
+#     (the first publish creates the project): PyPI project name fiz-sdk,
+#     owner FIZ-co, repository fiz-sdk-python, workflow release.yml,
+#     environment pypi.
+#  2. On GitHub: create the `pypi` environment, with required reviewers and
+#     deployments limited to `v*` tags.
+# The tag of a version that is already on PyPI is skipped rather than failing.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      already: ${{ steps.published.outputs.already }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked
+      - name: Tag matches the version
+        run: test "v$(uv run python -c 'from fiz_sdk import VERSION; print(VERSION)')" = "$GITHUB_REF_NAME"
+      - name: Skip a version already on PyPI
+        id: published
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          status=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/fiz-sdk/$version/json")
+          if [ "$status" = 200 ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::fiz-sdk $version is already on PyPI; nothing to publish."
+          fi
+      - name: Generated code matches openapi/openapi.json
+        if: steps.published.outputs.already != 'true'
+        run: uv run python scripts/generate.py && git diff --exit-code src/fiz_sdk/generated
+      - name: Check (lint, format, types, README, tests, build)
+        if: steps.published.outputs.already != 'true'
+        run: ./scripts/check.sh
+      - uses: actions/upload-artifact@v7
+        if: steps.published.outputs.already != 'true'
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: needs.build.outputs.already != 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@v1.14.3

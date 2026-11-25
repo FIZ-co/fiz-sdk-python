@@ -1,0 +1,113 @@
+name: Update API spec
+
+# Opens a pull request when https://api.fiz.co/-json changes, and runs the
+# checks here: a pull request pushed with GITHUB_TOKEN does not start the CI
+# workflow. The job fails (and the PR says so) until every new operation has
+# a resource method.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+# One run at a time: two runs that both see no open PR would each rebuild the
+# branch from main.
+concurrency:
+  group: update-spec
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # An open update PR may carry commits a person added (a resource method
+      # for a new operation): build on top of it, never over it. Otherwise
+      # start from main; the branch of a closed PR is replaced.
+      - name: Pick the branch
+        id: branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch=api-spec-update
+          echo "name=$branch" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Only an OPEN pull request from this branch: `gh pr view <branch>`
+          # also finds the last merged one.
+          open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          echo "open_pr=$open_pr" >> "$GITHUB_OUTPUT"
+          # The branch as this run found it (empty: it does not exist). A
+          # replace below only succeeds while it is still exactly that.
+          echo "remote_sha=$(git rev-parse -q --verify "refs/remotes/origin/$branch" || true)" >> "$GITHUB_OUTPUT"
+          if [ -n "$open_pr" ]; then
+            git checkout -B "$branch" "origin/$branch"
+            if ! git merge --no-edit origin/main; then
+              echo "::error::$branch (PR #$open_pr) does not merge with main. Merge main into it by hand; this run changes nothing."
+              exit 1
+            fi
+          else
+            git checkout -B "$branch" origin/main
+          fi
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.13'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run python scripts/update_spec.py
+      - name: Check against the new spec
+        id: check
+        continue-on-error: true
+        run: ./scripts/check.sh
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          OPEN_PR: ${{ steps.branch.outputs.open_pr }}
+          REMOTE_SHA: ${{ steps.branch.outputs.remote_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if git diff --quiet -- openapi src/fiz_sdk/generated; then
+            echo "Spec unchanged"
+            exit 0
+          fi
+          git add openapi src/fiz_sdk/generated
+          git commit -m "chore(spec): update to the current API document"
+          if [ -n "$OPEN_PR" ]; then
+            # A plain push: the branch was built on its remote tip, so this
+            # only adds commits. If someone pushed meanwhile it is refused,
+            # and the next run starts from their commits.
+            git push origin "$BRANCH"
+          else
+            # Replaces a closed PR's branch, but only the commit this run saw:
+            # if a PR was opened and pushed to meanwhile, the push is refused.
+            git push --force-with-lease="$BRANCH:$REMOTE_SHA" origin "$BRANCH"
+          fi
+          sha=$(git rev-parse HEAD)
+
+          # The result belongs to the commit it was checked on: a status on
+          # that SHA, shown in the PR's checks and replaced by the next run.
+          # (A push with GITHUB_TOKEN starts no CI run of its own.)
+          state=success; [ "$OUTCOME" = success ] || state=failure
+          gh api "repos/${{ github.repository }}/statuses/$sha" \
+            -f state="$state" -f context="spec-update / check" \
+            -f description="./scripts/check.sh against the new spec: $OUTCOME" \
+            -f target_url="$RUN_URL" >/dev/null
+
+          body="The API document at https://api.fiz.co/-json changed. Checks on ${sha:0:7}: **$OUTCOME** ([run]($RUN_URL)). If they failed, wrap the new operations in a resource method and push it to this branch: later updates are added on top of it. API changelog: https://api.fiz.co/docs/changelog"
+          if [ -n "$OPEN_PR" ]; then
+            gh pr edit "$OPEN_PR" --body "$body"
+          else
+            gh pr create --head "$BRANCH" \
+              --title "chore(spec): update to the current API document" --body "$body"
+          fi
+      - name: Fail when the checks failed
+        if: steps.check.outcome == 'failure'
+        run: exit 1

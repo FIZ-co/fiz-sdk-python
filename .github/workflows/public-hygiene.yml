@@ -1,0 +1,73 @@
+name: Public hygiene
+
+# This repository is public (AGENTS.md, "This repository is public"). Checks a
+# pull request's added lines, commit messages, title and description for the
+# terms in the INTERNAL_TERMS secret: one extended regex per line, matched
+# case-insensitively. The terms live in a secret because listing them here
+# would publish them; for the same reason the log says WHERE a term was found,
+# never which one (workflow logs of a public repository are public).
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Scan the pull request for internal terms
+        env:
+          TERMS: ${{ secrets.INTERNAL_TERMS }}
+          # Through env, never interpolated into the script: PR text is input.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          FROM_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -z "$TERMS" ]; then
+            # A fork's pull request gets no secrets; a maintainer reviews it.
+            # On this repository's own branches a missing secret would make
+            # the check pass without scanning anything, so it fails instead.
+            if [ "$FROM_FORK" = true ]; then
+              echo "::notice::Pull request from a fork: secrets are not available, scan skipped."
+              exit 0
+            fi
+            echo "::error::The INTERNAL_TERMS secret is not set: nothing was scanned. Add it in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          terms="$RUNNER_TEMP/terms"
+          printf '%s\n' "$TERMS" | sed '/^[[:space:]]*$/d' > "$terms"
+          found="$RUNNER_TEMP/found"
+          : > "$found"
+          matches() { grep -qiEf "$terms"; }
+
+          # Added lines, per file. The API document and the code generated
+          # from it are published by the API itself.
+          git diff --name-only "$BASE...$HEAD" -- . \
+            ':!openapi/openapi.json' ':!src/fiz_sdk/generated/' ':!uv.lock' |
+          while IFS= read -r file; do
+            if git diff -U0 "$BASE...$HEAD" -- "$file" | grep '^+' | grep -v '^+++' | matches; then
+              echo "added lines in $file" >> "$found"
+            fi
+          done
+          for sha in $(git rev-list "$BASE..$HEAD"); do
+            if git log -1 --format='%B' "$sha" | matches; then
+              echo "commit message of ${sha:0:7}" >> "$found"
+            fi
+          done
+          if printf '%s' "$PR_TITLE" | matches; then echo "pull request title" >> "$found"; fi
+          if printf '%s' "$PR_BODY" | matches; then echo "pull request description" >> "$found"; fi
+
+          if [ -s "$found" ]; then
+            while IFS= read -r where; do
+              echo "::error::Internal term in the $where (not shown: this log is public). See AGENTS.md."
+            done < "$found"
+            exit 1
+          fi
+          echo "No internal terms found."
