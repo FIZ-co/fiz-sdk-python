@@ -1,0 +1,73 @@
+name: Update API spec
+
+# Opens a pull request when https://api.fiz.co/-json changes, and runs the
+# checks here: a pull request pushed with GITHUB_TOKEN does not start the CI
+# workflow. The job fails (and the PR says so) until every new operation has
+# a resource method.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.4.0
+        with:
+          python-version: '3.13'
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run python scripts/update_spec.py
+      - name: Check against the new spec
+        id: check
+        continue-on-error: true
+        run: ./scripts/check.sh
+      - name: Open or update the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.check.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if git diff --quiet -- openapi src/fiz_sdk/generated; then
+            echo "Spec unchanged"
+            exit 0
+          fi
+          branch=api-spec-update
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add openapi src/fiz_sdk/generated
+          git commit -m "chore(spec): update to the current API document"
+          git push --force origin "$branch"
+          sha=$(git rev-parse HEAD)
+
+          # The result belongs to the commit it was checked on: a status on
+          # that SHA, shown in the PR's checks and replaced by the next run.
+          # (A push with GITHUB_TOKEN starts no CI run of its own.)
+          state=success; [ "$OUTCOME" = success ] || state=failure
+          gh api "repos/${{ github.repository }}/statuses/$sha" \
+            -f state="$state" -f context="spec-update / check" \
+            -f description="./scripts/check.sh against the new spec: $OUTCOME" \
+            -f target_url="$RUN_URL" >/dev/null
+
+          body="The API document at https://api.fiz.co/-json changed. Checks on ${sha:0:7}: **$OUTCOME** ([run]($RUN_URL)). If they failed, wrap the new operations in a resource method. API changelog: https://api.fiz.co/docs/changelog"
+          # Only an OPEN pull request from this branch: `gh pr view <branch>`
+          # also finds the last merged one, and would edit it instead of
+          # opening a new one.
+          open_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open_pr" ]; then
+            gh pr edit "$open_pr" --body "$body"
+          else
+            gh pr create --head "$branch" \
+              --title "chore(spec): update to the current API document" --body "$body"
+          fi
+      - name: Fail when the checks failed
+        if: steps.check.outcome == 'failure'
+        run: exit 1
